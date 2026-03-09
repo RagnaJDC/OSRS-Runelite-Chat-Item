@@ -94,19 +94,22 @@ Colour thresholds used to highlight item names based on their GE value. All colo
 
 *Drop broadcast with item highlighted and value replaced:*
 
-<!-- ![Drop broadcast example](images/drop_broadcast.png) -->
+<img width="962" height="217" alt="clanandfriend" src="https://github.com/user-attachments/assets/df2e955e-4b77-4d10-bb3c-9e6165557cac" />
+
 
 *Hover tooltip showing item icon, prices, and equipment stats:*
 
-<!-- ![Tooltip example](images/tooltip.png) -->
+<img width="1061" height="317" alt="tooltip" src="https://github.com/user-attachments/assets/d8b21be6-11e7-4399-bf35-73d0fd1be8fa" />
+
 
 *Right-click wiki lookup:*
 
-<!-- ![Wiki right-click example](images/wiki_rightclick.png) -->
+<img width="858" height="221" alt="wiki look up" src="https://github.com/user-attachments/assets/1eaf191b-8917-4b8b-8330-1e22a493fc4b" />
+
 
 *Personal valuable drop notification:*
 
-<!-- ![Personal drop example](images/personal_drop.png) -->
+<img width="967" height="219" alt="drop items" src="https://github.com/user-attachments/assets/be764b53-cf97-4b7b-bd04-0f229dc0c02e" />
 
 ---
 

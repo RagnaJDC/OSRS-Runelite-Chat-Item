@@ -8,4 +8,4 @@ nbactions.xml
 nb-configuration.xml
 nbproject/
 .vscode/
-build.gradle
+run.bat

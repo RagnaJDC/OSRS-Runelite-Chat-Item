@@ -12,9 +12,11 @@ import java.awt.image.BufferedImage;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.inject.Inject;
@@ -41,14 +43,13 @@ import net.runelite.client.util.QuantityFormatter;
 @Slf4j
 public class ChatItemOverlay extends Overlay
 {
-	// Matches <col=RRGGBB>item name</col>
-	private static final Pattern COL_ITEM_PATTERN = Pattern.compile(
-		"<col=([0-9a-fA-F]{6})>([^<]{2,}?)(?:\\s+x(\\d+))?</col>",
-		Pattern.CASE_INSENSITIVE
-	);
-
 	// Strips any RuneLite tag so we can measure plain-text widths
 	private static final Pattern TAG_PATTERN = Pattern.compile("<[^>]+>");
+
+	private static final Pattern QTY_LEADING_PATTERN =
+		Pattern.compile("^\\s*(\\d+)\\s+x\\s+", Pattern.CASE_INSENSITIVE);
+	private static final Pattern QTY_TRAILING_PATTERN =
+		Pattern.compile("\\s+x(\\d+)\\s*$", Pattern.CASE_INSENSITIVE);
 
 	// Rarity colours (hex, no #)
 	static final String COLOR_COMMON    = "ffffff";
@@ -282,33 +283,7 @@ public class ChatItemOverlay extends Overlay
 
 		final int originX = bounds.x + 2;
 
-		List<CandidateSpan> itemCandidates = new ArrayList<>();
-		Matcher colorTagMatcher = COL_ITEM_PATTERN.matcher(text);
-		while (colorTagMatcher.find())
-		{
-			String candidateName = colorTagMatcher.group(2).trim();
-			if (!candidateName.matches(".*[a-zA-Z]{2,}.*"))
-			{
-				continue;
-			}
-
-			// Strip leading "N x " quantity prefix (e.g. "14 x black knife")
-			candidateName = candidateName.replaceAll("^\\d+\\s+x\\s+", "").trim();
-			// Strip trailing " xN" suffix
-			candidateName = candidateName.replaceAll("\\s+x\\d+$", "").trim();
-
-			if (isFiltered(candidateName))
-			{
-				continue;
-			}
-
-			TooltipData resolvedData = resolveByName(candidateName);
-			if (resolvedData != null)
-			{
-				itemCandidates.add(new CandidateSpan(colorTagMatcher.start(), colorTagMatcher.end(), candidateName, resolvedData));
-			}
-		}
-
+		List<CandidateSpan> itemCandidates = collectItemCandidates(text);
 		if (itemCandidates.isEmpty())
 		{
 			return null;
@@ -371,27 +346,17 @@ public class ChatItemOverlay extends Overlay
 
 				if (isItemSpan)
 				{
-					int depth = 1;
-					int j = tagEnd + 1;
-					while (j < text.length() && depth > 0)
+					int closeIdx = findMatchingCloseCol(text, tagEnd);
+					if (closeIdx == -1)
 					{
-						if (text.regionMatches(true, j, "<col=", 0, 5))
-						{
-							depth++;
-						}
-						else if (text.regionMatches(true, j, "</col>", 0, 6))
-						{
-							depth--;
-						}
-						if (depth > 0)
-						{
-							j++;
-						}
+						pos = tagEnd + 1;
+						continue;
 					}
-					String innerText = text.substring(tagEnd + 1, j);
+
+					String innerText = text.substring(tagEnd + 1, closeIdx);
 					String displayText = TAG_PATTERN.matcher(innerText).replaceAll("");
 					cursorX += fm.stringWidth(displayText);
-					pos = j + 6;
+					pos = closeIdx + 6;
 					continue;
 				}
 			}
@@ -418,6 +383,219 @@ public class ChatItemOverlay extends Overlay
 			}
 		}
 		return closestItem;
+	}
+
+	/**
+	 * Walks nested {@code <col>} tags and returns leaf spans that use one of this
+	 * plugin's item-rarity colours and resolve to a known item. This avoids the
+	 * regex/DOTALL bug where an outer name-colour tag (e.g. from Chat Name Colors)
+	 * greedily consumes inner item-colour tags.
+	 */
+	private List<CandidateSpan> collectItemCandidates(String text)
+	{
+		List<ColSpan> leafSpans = new ArrayList<>();
+		collectLeafColSpans(text, 0, text.length(), leafSpans);
+
+		List<CandidateSpan> itemCandidates = new ArrayList<>();
+		for (ColSpan span : leafSpans)
+		{
+			if (!isPluginItemColor(span.colHex))
+			{
+				continue;
+			}
+
+			String candidateName = TAG_PATTERN.matcher(span.innerText).replaceAll("").trim();
+			if (!candidateName.matches(".*[a-zA-Z]{2,}.*"))
+			{
+				continue;
+			}
+
+			int quantity = 1;
+			Matcher leadingQty = QTY_LEADING_PATTERN.matcher(candidateName);
+			if (leadingQty.find())
+			{
+				try
+				{
+					quantity = Integer.parseInt(leadingQty.group(1));
+				}
+				catch (NumberFormatException ignored)
+				{
+				}
+				candidateName = candidateName.replaceFirst("^\\s*\\d+\\s+x\\s+", "").trim();
+			}
+			else
+			{
+				Matcher trailingQty = QTY_TRAILING_PATTERN.matcher(candidateName);
+				if (trailingQty.find())
+				{
+					try
+					{
+						quantity = Integer.parseInt(trailingQty.group(1));
+					}
+					catch (NumberFormatException ignored)
+					{
+					}
+					candidateName = candidateName.replaceFirst("\\s+x\\d+\\s*$", "").trim();
+				}
+			}
+
+			if (isFiltered(candidateName))
+			{
+				continue;
+			}
+
+			TooltipData resolvedData = resolveByName(candidateName);
+			if (resolvedData == null)
+			{
+				continue;
+			}
+
+			TooltipData display = copyTooltipData(resolvedData);
+			display.quantity = Math.max(1, quantity);
+			itemCandidates.add(new CandidateSpan(span.startIdx, span.endIdx, candidateName, display));
+		}
+		return itemCandidates;
+	}
+
+	private static TooltipData copyTooltipData(TooltipData source)
+	{
+		TooltipData display = new TooltipData();
+		display.itemId = source.itemId;
+		display.name = source.name;
+		display.gePrice = source.gePrice;
+		display.haPrice = source.haPrice;
+		display.members = source.members;
+		display.isTradeable = source.isTradeable;
+		display.colHex = source.colHex;
+		display.isEquipable = source.isEquipable;
+		display.weight = source.weight;
+		display.equipmentStats = source.equipmentStats;
+		return display;
+	}
+
+	private void collectLeafColSpans(String text, int regionStart, int regionEnd, List<ColSpan> out)
+	{
+		int pos = regionStart;
+		while (pos < regionEnd)
+		{
+			int colStart = indexOfIgnoreCase(text, "<col=", pos, regionEnd);
+			if (colStart == -1)
+			{
+				break;
+			}
+
+			int tagEnd = text.indexOf('>', colStart);
+			if (tagEnd == -1 || tagEnd >= regionEnd)
+			{
+				break;
+			}
+
+			String colHex = text.substring(colStart + 5, tagEnd);
+			int closeIdx = findMatchingCloseCol(text, tagEnd);
+			if (closeIdx == -1 || closeIdx >= regionEnd)
+			{
+				pos = tagEnd + 1;
+				continue;
+			}
+
+			int contentStart = tagEnd + 1;
+			int contentEnd = closeIdx;
+			int spanEnd = closeIdx + 6;
+
+			if (containsColTag(text, contentStart, contentEnd))
+			{
+				collectLeafColSpans(text, contentStart, contentEnd, out);
+			}
+			else
+			{
+				out.add(new ColSpan(colStart, spanEnd, colHex, text.substring(contentStart, contentEnd)));
+			}
+
+			pos = spanEnd;
+		}
+	}
+
+	private static int findMatchingCloseCol(String text, int openTagEnd)
+	{
+		int depth = 1;
+		int j = openTagEnd + 1;
+		while (j < text.length())
+		{
+			if (text.regionMatches(true, j, "<col=", 0, 5))
+			{
+				int gt = text.indexOf('>', j);
+				if (gt == -1)
+				{
+					return -1;
+				}
+				depth++;
+				j = gt + 1;
+			}
+			else if (text.regionMatches(true, j, "</col>", 0, 6))
+			{
+				depth--;
+				if (depth == 0)
+				{
+					return j;
+				}
+				j += 6;
+			}
+			else
+			{
+				j++;
+			}
+		}
+		return -1;
+	}
+
+	private static boolean containsColTag(String text, int start, int end)
+	{
+		return indexOfIgnoreCase(text, "<col=", start, end) != -1;
+	}
+
+	private static int indexOfIgnoreCase(String text, String needle, int start, int end)
+	{
+		int max = end - needle.length();
+		for (int i = start; i <= max; i++)
+		{
+			if (text.regionMatches(true, i, needle, 0, needle.length()))
+			{
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	private boolean isPluginItemColor(String hex)
+	{
+		if (hex == null)
+		{
+			return false;
+		}
+		return pluginItemColors().contains(hex.toLowerCase());
+	}
+
+	private Set<String> pluginItemColors()
+	{
+		Set<String> colors = new HashSet<>(5);
+		colors.add(colorToHex(config.colorCommon()).toLowerCase());
+		colors.add(colorToHex(config.colorUncommon()).toLowerCase());
+		colors.add(colorToHex(config.colorRare()).toLowerCase());
+		colors.add(colorToHex(config.colorEpic()).toLowerCase());
+		colors.add(colorToHex(config.colorLegendary()).toLowerCase());
+		return colors;
+	}
+
+	private boolean mightContainItem(String text)
+	{
+		for (String color : pluginItemColors())
+		{
+			if (text.toLowerCase().contains("<col=" + color))
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** Returns true if the item name is in the user's filter list. */
@@ -450,6 +628,22 @@ public class ChatItemOverlay extends Overlay
 			this.startIdx = startIndex;
 			this.name = itemName;
 			this.data = tooltipData;
+		}
+	}
+
+	private static class ColSpan
+	{
+		final int startIdx;
+		final int endIdx;
+		final String colHex;
+		final String innerText;
+
+		ColSpan(int startIdx, int endIdx, String colHex, String innerText)
+		{
+			this.startIdx = startIdx;
+			this.endIdx = endIdx;
+			this.colHex = colHex;
+			this.innerText = innerText;
 		}
 	}
 
@@ -542,16 +736,9 @@ public class ChatItemOverlay extends Overlay
 		}
 
 		String widgetText = widget.getText();
-		if (widgetText != null && widgetText.contains("<col="))
+		if (widgetText != null && widgetText.contains("<col=") && mightContainItem(widgetText))
 		{
-			Matcher colorMatcher = COL_ITEM_PATTERN.matcher(widgetText);
-			while (colorMatcher.find())
-			{
-				if (colorMatcher.group(2).matches(".*[a-zA-Z].*"))
-				{
-					return widget;
-				}
-			}
+			return widget;
 		}
 
 		return checkChildren(widget, mouseX, mouseY);

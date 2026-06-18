@@ -9,3 +9,5 @@ nb-configuration.xml
 nbproject/
 .vscode/
 run.bat
+# Local dev-only test helpers (not for release)
+src/test/java/com/chatitem/dev/

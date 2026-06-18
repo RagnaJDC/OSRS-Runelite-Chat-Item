@@ -190,7 +190,7 @@ public void onMenuOpened(MenuOpened event)
 	entry.onClick(e -> ChatItemOverlay.openWiki(itemName));
 }
 
-@Subscribe
+@Subscribe(priority = -1f)
 public void onChatMessage(ChatMessage event)
 {
 	ChatMessageType type = event.getType();
@@ -213,7 +213,7 @@ public void onChatMessage(ChatMessage event)
 	if ((isFriendsBroadcast && config.replaceFriendsChatDrops())
 		|| (isClanBroadcast && config.replaceClanChatDrops()))
 	{
-		String rawMessage = Text.removeTags(event.getMessage());
+		String rawMessage = cleanChatMessage(event.getMessage());
 		String replacedMessage = tryReplaceDropValue(rawMessage, type);
 		if (replacedMessage != null)
 		{
@@ -240,7 +240,7 @@ public void onChatMessage(ChatMessage event)
 	// still colour the item name for tooltips
 	if (isClanBroadcast || isFriendsBroadcast)
 	{
-		String rawMessage = Text.removeTags(event.getMessage());
+		String rawMessage = cleanChatMessage(event.getMessage());
 		String clueMessage = tryColourClueItem(rawMessage, type);
 		if (clueMessage != null)
 		{
@@ -301,7 +301,7 @@ public void onChatMessage(ChatMessage event)
 
 private void handlePersonalDrop(ChatMessage event)
 {
-	String rawMessage = Text.removeTags(event.getMessageNode().getValue());
+	String rawMessage = cleanChatMessage(event.getMessageNode().getValue());
 	Matcher valuableDropMatcher = VALUABLE_DROP_PATTERN.matcher(rawMessage);
 	if (!valuableDropMatcher.find())
 	{
@@ -961,6 +961,16 @@ private int lookupItemId(String itemName)
 }
 
 //  Formatting helpers
+
+/** Strip chat formatting tags and normalise whitespace for pattern matching. */
+private static String cleanChatMessage(String message)
+{
+	if (message == null)
+	{
+		return "";
+	}
+	return Text.removeTags(message).replace('\u00A0', ' ');
+}
 
 private String formatValue(int value)
 {

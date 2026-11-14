@@ -160,7 +160,7 @@ public class ChatItemOverlay extends Overlay
 		try
 		{
 			ItemComposition itemComposition = itemManager.getItemComposition(itemId);
-			int grandExchangePrice = itemManager.getItemPrice(itemId);
+			long grandExchangePrice = itemManager.getItemPrice(itemId);
 
 			TooltipData tooltipData = new TooltipData();
 			tooltipData.itemId      = itemId;
@@ -1146,7 +1146,7 @@ public class ChatItemOverlay extends Overlay
 		return COL_VALUE;
 	}
 
-	static String getRarityColor(int grandExchangePrice, ChatItemConfig config)
+	static String getRarityColor(long grandExchangePrice, ChatItemConfig config)
 	{
 		if (grandExchangePrice >= 10_000_000) return colorToHex(config.colorLegendary());
 		if (grandExchangePrice >=  1_000_000) return colorToHex(config.colorEpic());
@@ -1219,7 +1219,7 @@ public class ChatItemOverlay extends Overlay
 	{
 		int itemId;
 		String name;
-		int gePrice;
+		long gePrice;
 		int haPrice;
 		boolean members;
 		boolean isTradeable;

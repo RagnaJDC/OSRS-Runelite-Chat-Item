@@ -329,7 +329,7 @@ private void handlePersonalDrop(ChatMessage event)
 		return;
 	}
 
-	int grandExchangeValue = itemManager.getItemPrice(itemId);
+	long grandExchangeValue = itemManager.getItemPrice(itemId);
 	int highAlchValue = itemManager.getItemComposition(itemId).getHaPrice();
 
 	if (isCoins(itemName))
@@ -338,7 +338,7 @@ private void handlePersonalDrop(ChatMessage event)
 		highAlchValue = 1;
 	}
 
-	int totalGrandExchangeValue = grandExchangeValue * quantity;
+	long totalGrandExchangeValue = grandExchangeValue * quantity;
 	int totalHighAlchValue = highAlchValue * quantity;
 
 	// Always colour the item name. The game already filtered by the valuable drop
@@ -363,7 +363,7 @@ private void handlePersonalDrop(ChatMessage event)
 }
 
 /** Returns just the value portion, e.g. "(GE: 3,072)" -- no item name. */
-private String buildValueSuffix(String itemName, int haValue, int geValue)
+private String buildValueSuffix(String itemName, int haValue, long geValue)
 {
 	boolean isCoinDrop = isCoins(itemName);
 	DropPriceDisplayType displayType = config.displayPrices();
@@ -405,7 +405,7 @@ private String buildValueSuffix(String itemName, int haValue, int geValue)
  * Uses the broadcastDisplayPrices config. origCoins is the raw coin string
  * from the game message (used as GE fallback when geValue is 0).
  */
-private String buildBroadcastSuffix(String itemName, int haValue, int geValue, String origCoins)
+private String buildBroadcastSuffix(String itemName, int haValue, long geValue, String origCoins)
 {
 	boolean coins = isCoins(itemName);
 	DropPriceDisplayType display = config.broadcastDisplayPrices();
@@ -471,7 +471,7 @@ private String tryColourClueItem(String message, ChatMessageType type)
 	String trailingText = clueMatcher.group(4); // usually "." or empty
 
 	int itemId = lookupItemId(itemName);
-	int grandExchangeValue = itemId >= 0 ? itemManager.getItemPrice(itemId) : 0;
+	long grandExchangeValue = itemId >= 0 ? itemManager.getItemPrice(itemId) : 0L;
 	int highAlchValue = itemId >= 0 ? itemManager.getItemComposition(itemId).getHaPrice() : 0;
 	if (itemId >= 0)
 	{
@@ -507,7 +507,7 @@ private String tryColourCollectionLog(String message, ChatMessageType type)
 	String suffix = collectionLogMatcher.group(3); // " (87/1698)"
 
 	int itemId = lookupItemId(itemName);
-	int grandExchangeValue = itemId >= 0 ? itemManager.getItemPrice(itemId) : 0;
+	long grandExchangeValue = itemId >= 0 ? itemManager.getItemPrice(itemId) : 0L;
 	int highAlchValue = itemId >= 0 ? itemManager.getItemComposition(itemId).getHaPrice() : 0;
 	String itemColorHex = ChatItemOverlay.getRarityColor(grandExchangeValue > 0 ? grandExchangeValue : highAlchValue, config);
 	if (itemId >= 0)
@@ -543,9 +543,9 @@ private String tryReplaceDropValue(String message, ChatMessageType type)
 
 		int itemId = lookupItemId(itemName);
 		int highAlchUnitValue = itemId >= 0 ? itemManager.getItemComposition(itemId).getHaPrice() : 0;
-		int grandExchangeUnitValue = itemId >= 0 ? itemManager.getItemPrice(itemId) : 0;
+		long grandExchangeUnitValue = itemId >= 0 ? itemManager.getItemPrice(itemId) : 0L;
 		int highAlchTotalValue = highAlchUnitValue * quantity;
-		int grandExchangeTotalValue = grandExchangeUnitValue * quantity;
+		long grandExchangeTotalValue = grandExchangeUnitValue * quantity;
 
 		if (highAlchUnitValue <= 0 && grandExchangeUnitValue <= 0)
 		{
@@ -576,7 +576,7 @@ private String tryReplaceDropValue(String message, ChatMessageType type)
 		String itemName = specialDropMatcher.group(2).trim();
 		int itemId = lookupItemId(itemName);
 		int highAlchValue = itemId >= 0 ? itemManager.getItemComposition(itemId).getHaPrice() : 0;
-		int grandExchangeValue = itemId >= 0 ? itemManager.getItemPrice(itemId) : 0;
+		long grandExchangeValue = itemId >= 0 ? itemManager.getItemPrice(itemId) : 0L;
 		if (highAlchValue <= 0 && grandExchangeValue <= 0)
 		{
 			return null;
@@ -805,7 +805,7 @@ private String highlightItemNames(String message, String defaultColour)
 		if (bestMatchName != null)
 		{
 			int itemId = itemNameToId.get(bestMatchName);
-			int gePrice = itemManager.getItemPrice(itemId);
+			long gePrice = itemManager.getItemPrice(itemId);
 			String itemColorHex = ChatItemOverlay.getRarityColor(gePrice, config);
 			String displayText = message.substring(pos, pos + bestMatchLength);
 
@@ -972,22 +972,35 @@ private static String cleanChatMessage(String message)
 	return Text.removeTags(message).replace('\u00A0', ' ');
 }
 
-private String formatValue(int value)
+private String formatValue(long value)
 {
 	if (config.formatPrices())
 	{
-		return QuantityFormatter.quantityToRSDecimalStack(value) + " gp";
+		return compactPrice(value) + " gp";
 	}
 	return QuantityFormatter.formatNumber(value) + " gp";
 }
 
-private String formatBroadcastValue(int value)
+private String formatBroadcastValue(long value)
 {
 	if (config.formatBroadcastPrices())
 	{
-		return QuantityFormatter.quantityToRSDecimalStack(value);
+		return compactPrice(value);
 	}
 	return String.format("%,d", value);
+}
+
+/**
+ * Compact K/M/B form. {@code quantityToRSDecimalStack} is still {@code int}-only,
+ * so stack totals above {@link Integer#MAX_VALUE} use the {@code long} formatter.
+ */
+private static String compactPrice(long value)
+{
+	if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE)
+	{
+		return QuantityFormatter.quantityToStackSize(value);
+	}
+	return QuantityFormatter.quantityToRSDecimalStack((int) value);
 }
 
 private static boolean isCoins(String name)

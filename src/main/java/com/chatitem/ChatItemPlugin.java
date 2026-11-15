@@ -177,17 +177,18 @@ public void onMenuOpened(MenuOpened event)
 	}
 
 	ChatItemOverlay.TooltipData tooltipData = overlay.getHoveredItem();
-	if (tooltipData == null || tooltipData.name == null)
+	if (tooltipData == null || tooltipData.name == null || tooltipData.itemId < 0)
 	{
 		return;
 	}
 
 	final String itemName = tooltipData.name;
+	final int itemId = tooltipData.itemId;
 	MenuEntry entry = client.getMenu().createMenuEntry(-1);
 	entry.setOption("Lookup on Wiki");
 	entry.setTarget("<col=ff9040>" + itemName + "</col>");
 	entry.setType(MenuAction.RUNELITE);
-	entry.onClick(e -> ChatItemOverlay.openWiki(itemName));
+	entry.onClick(e -> ChatItemOverlay.openWiki(itemId));
 }
 
 @Subscribe(priority = -1f)

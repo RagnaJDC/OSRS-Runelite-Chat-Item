@@ -1,7 +1,6 @@
 package com.chatitem;
 
 import java.awt.Color;
-import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.FontMetrics;
@@ -9,8 +8,6 @@ import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
-import java.net.URI;
-import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -35,6 +32,7 @@ import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
 import net.runelite.client.util.HotkeyListener;
+import net.runelite.client.util.LinkBrowser;
 import net.runelite.client.util.QuantityFormatter;
 
 /**
@@ -809,18 +807,9 @@ public class ChatItemOverlay extends Overlay
 		return cachedTooltip;
 	}
 
-	static void openWiki(String itemName)
+	static void openWiki(int itemId)
 	{
-		try
-		{
-			String encoded = URLEncoder.encode(itemName.replace(' ', '_'), "UTF-8");
-			URI uri = new URI("https://oldschool.runescape.wiki/w/" + encoded);
-			Desktop.getDesktop().browse(uri);
-		}
-		catch (Exception ex)
-		{
-			log.debug("ChatItemOverlay: failed to open wiki for '{}'", itemName, ex);
-		}
+		LinkBrowser.browse("https://oldschool.runescape.wiki/w/Special:Lookup?type=item&id=" + itemId);
 	}
 
 // ---------------------------------------------------------------
